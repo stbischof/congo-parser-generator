@@ -119,11 +119,10 @@ private boolean unparsedTokensAreNodes = ${settings::unparsedTokensAreNodes ? "t
         n.setBeginOffset(lastConsumedToken.getEndOffset());
         n.setEndOffset(lastConsumedToken.getEndOffset());
         currentNodeScope.close();
-        ArrayList<Node> nodes = new ArrayList<>();
-        for (int i = 0;i < num;i++) {
-           nodes.add(popNode());
+        Node[] nodes = new Node[num];
+        for (int i = num - 1; i >= 0; i--) {
+           nodes[i] = popNode();
         }
-        Collections.reverse(nodes);
         for (Node child : nodes) {
             if (child.getInputSource() == n.getInputSource()) {
                 n.setBeginOffset(child.getBeginOffset());
