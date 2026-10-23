@@ -2,6 +2,9 @@
 
 private ArrayList<NonTerminalCall> parsingStack = new ArrayList<>();
 private final ArrayList<NonTerminalCall> lookaheadStack = new ArrayList<>();
+// The entries the lookahead stack has had, one per depth, for reuse. Only their
+// production name is read, and neither a ParseException nor a ParseState copies them.
+private final ArrayList<NonTerminalCall> lookaheadEntries = new ArrayList<>();
 
 #if settings::faultTolerant
   private EnumSet<TokenType> currentFollowSet;
@@ -99,7 +102,13 @@ private Iterator<String> backwardStackIteratorIncludingCurrent() {
 }
 
 private void pushOntoLookaheadStack(String methodName, String fileName, int line, int column) {
-    lookaheadStack.add(new NonTerminalCall(
+    int depth = lookaheadStack.size();
+    NonTerminalCall ntc;
+    if (depth < lookaheadEntries.size()) {
+        ntc = lookaheadEntries.get(depth);
+        ntc.reuse(getToken(1), fileName, methodName, line, column);
+    } else {
+        ntc = new NonTerminalCall(
           "${settings::parserClassName}",
           getToken(1),
           fileName,
@@ -107,8 +116,10 @@ private void pushOntoLookaheadStack(String methodName, String fileName, int line
           line,
           column
           ${settings::faultTolerant ? ", null"}
-       )
-    );
+        );
+        lookaheadEntries.add(ntc);
+    }
+    lookaheadStack.add(ntc);
 }
 
 private void popLookaheadStack() {

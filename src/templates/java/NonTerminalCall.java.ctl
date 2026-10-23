@@ -10,11 +10,11 @@ import java.io.PrintStream;
 #endif
 
 public class NonTerminalCall {
-    final String sourceFile;
-    public final String productionName;
+    String sourceFile;
+    public String productionName;
     final String parserClassName;
-    final TokenSource tokenSource;
-    final int position, line, column;
+    TokenSource tokenSource;
+    int position, line, column;
     int javaSourceLine;
 #if settings::faultTolerant
     final Set<${BaseTokenType}> followSet;
@@ -40,6 +40,18 @@ public class NonTerminalCall {
 #if settings::faultTolerant
         this.followSet = followSet;
 #endif
+    }
+
+    // Gives an entry of the lookahead stack, which nothing keeps once it is popped, new content.
+    // Public, as with ROOT_API_PACKAGE the parser is in another package.
+    public void reuse(${LocationType} location, String sourceFile, String productionName, int line, int column) {
+        this.tokenSource = location.getTokenSource();
+        this.position = location.getBeginOffset();
+        this.sourceFile = sourceFile;
+        this.productionName = productionName;
+        this.line = line;
+        this.column = column;
+        this.javaSourceLine = 0;
     }
 
     public String getLocation() {
