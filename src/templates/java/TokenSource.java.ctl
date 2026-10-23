@@ -49,6 +49,9 @@ abstract public class TokenSource implements CharSequence
 // A BitSet that stores where the tokens are located.
 #-- This is not strictly necessary, I suppose...
    private BitSet tokenOffsets;
+// Counts the changes to the cached tokens. The parser keeps the token
+// it last found after a given token for as long as this does not change.
+   private int cacheVersion;
 
 //  A Bitset that stores the line numbers that
 // contain either hard tabs or extended (beyond 0xFFFF) unicode
@@ -231,6 +234,7 @@ abstract public class TokenSource implements CharSequence
     }
 
     protected final void setIgnoredRange(int begin, int end) {
+        cacheVersion++;
         for (int offset = begin; offset < end; offset++) {
            tokenLocationTable[offset] = IGNORED;
            tokenOffsets.clear(begin, end);
@@ -285,10 +289,23 @@ abstract public class TokenSource implements CharSequence
     }
 
 #endif
+    public final int getCacheVersion() {
+        return cacheVersion;
+    }
+
+    /**
+     * To be called when a cached token changes in a way that can change
+     * which token follows another one.
+     */
+    public final void cachedTokensChanged() {
+        cacheVersion++;
+    }
+
     public void cacheToken(${BaseToken} tok) {
         int beginOffset = tok.getBeginOffset();
         // If the token is already cached, we just jump out. (I think this is okay...)
         if (tokenLocationTable[beginOffset] == tok) return;
+        cacheVersion++;
         int endOffset = tok.getEndOffset();
         tokenOffsets.set(beginOffset);
         if (endOffset > beginOffset + 1) {
@@ -309,6 +326,7 @@ abstract public class TokenSource implements CharSequence
     }
 
     public void uncacheTokens(${BaseToken} lastToken) {
+        cacheVersion++;
         int endOffset = lastToken.getEndOffset();
         if (endOffset < tokenOffsets.length()) {
             tokenOffsets.clear(lastToken.getEndOffset(), tokenOffsets.length());
@@ -316,6 +334,7 @@ abstract public class TokenSource implements CharSequence
     }
 
     protected void cleanUpOrphans(${BaseToken} tok) {
+        cacheVersion++;
         tokenOffsets.clear(tok.getBeginOffset()+1, tok.getEndOffset());
     }
 

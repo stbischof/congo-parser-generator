@@ -132,10 +132,12 @@ public class ${settings::baseTokenClassName} ${implements} {
         prependedToken.inserted = true;
         prependedToken.beginOffset = prependedToken.endOffset = this.beginOffset;
         this.prependedToken = prependedToken;
+        tokenChanged();
     }
 
     void unsetAppendedToken() {
         this.appendedToken = null;
+        tokenChanged();
     }
 
 #endif
@@ -147,6 +149,7 @@ public class ${settings::baseTokenClassName} ${implements} {
      */
     public void setBeginOffset(int beginOffset) {
         this.beginOffset = beginOffset;
+        tokenChanged();
     }
 
     /**
@@ -156,6 +159,12 @@ public class ${settings::baseTokenClassName} ${implements} {
      */
     public void setEndOffset(int endOffset) {
         this.endOffset = endOffset;
+        tokenChanged();
+    }
+
+    // The token that follows this one can be another one now.
+    private void tokenChanged() {
+        if (tokenSource != null) tokenSource.cachedTokensChanged();
     }
 
     /**
@@ -179,7 +188,9 @@ public class ${settings::baseTokenClassName} ${implements} {
      * programmer needs to use this method.
      */
     public void setTokenSource(TokenSource tokenSource) {
+        tokenChanged();
         this.tokenSource = tokenSource;
+        tokenChanged();
     }
 
     public boolean isInvalid() {
@@ -403,6 +414,7 @@ public class ${settings::baseTokenClassName} ${implements} {
 #else
         getTokenSource().cacheToken(result);
 #endif
+        tokenChanged();
         return result;
     }
 
@@ -429,6 +441,7 @@ public class ${settings::baseTokenClassName} ${implements} {
 
     public void setUnparsed(boolean unparsed) {
         this.unparsed = unparsed;
+        tokenChanged();
     }
 
     /**
