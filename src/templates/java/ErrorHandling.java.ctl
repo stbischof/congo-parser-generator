@@ -185,6 +185,8 @@ void dumpLookaheadCallStack(PrintStream ps) {
       private ${settings::baseTokenClassName} consumeToken(TokenType expectedType
         #if settings::faultTolerant
           , boolean tolerant, EnumSet<TokenType> followSet, Runnable recoveryAction
+        #else
+          , String productionName, String fileName, int line, int column
         #endif
       )
       ${settings::useCheckedException ? "throws ParseException"}
@@ -200,6 +202,8 @@ void dumpLookaheadCallStack(PrintStream ps) {
             nextToken = handleUnexpectedTokenType(expectedType, nextToken
             #if settings::faultTolerant
                , tolerant, followSet
+            #else
+               , productionName, fileName, line, column
             #endif
             );
         }
@@ -240,6 +244,8 @@ void dumpLookaheadCallStack(PrintStream ps) {
   private ${settings::baseTokenClassName} handleUnexpectedTokenType(TokenType expectedType, ${settings::baseTokenClassName} nextToken
       #if settings::faultTolerant
         , boolean tolerant, EnumSet<TokenType> followSet
+      #else
+        , String productionName, String fileName, int line, int column
       #endif
       )
       #if settings::useCheckedException
@@ -247,7 +253,12 @@ void dumpLookaheadCallStack(PrintStream ps) {
       #endif
       {
       #if !settings::faultTolerant
-       throw new ParseException(nextToken, EnumSet.of(expectedType), parsingStack);
+       // The terminal is the innermost entry of the call stack, but it is
+       // pushed only now that it failed, not for every token consumed.
+       pushOntoCallStack(productionName, fileName, line, column);
+       ParseException pe = new ParseException(nextToken, EnumSet.of(expectedType), parsingStack);
+       popCallStack();
+       throw pe;
       #else
        if (!this.tolerantParsing) {
           throw new ParseException(nextToken, EnumSet.of(expectedType), parsingStack);

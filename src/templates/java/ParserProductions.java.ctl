@@ -890,13 +890,7 @@
    #var LHS = getLhsPattern(terminal::assignment, "Token"), regexp = terminal::regexp
    #var lambda = terminal::recoveryBlock!
    #if !settings::faultTolerant
-       pushOntoCallStack("${currentProduction::name}","${terminal::inputSource.JavaStringEncode}", ${terminal::beginLine}, ${terminal::beginColumn});
-       try {
-           ${LHS.replace("@", "consumeToken(" + regexp::label + ")")};
-       }
-       finally {
-         popCallStack();
-       }
+       ${LHS.replace("@", "consumeToken(" + regexp::label + ", \"" + currentProduction::name + "\", \"" + terminal::inputSource.JavaStringEncode + "\", " + terminal::beginLine + ", " + terminal::beginColumn + ")")};
    #else
        #var tolerant = terminal::tolerantParsing ? "true" : "false" ,
             followSetVarName = terminal::followSetVarName
