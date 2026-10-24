@@ -102,7 +102,6 @@ abstract public class TokenSource implements CharSequence
         this.startingLine = startingLine;
         this.startingColumn = startingColumn;
         this.content = mungeContent(input, preserveTabs, tabSize, preserveLineEndings, javaUnicodeEscape, terminatingString);
-        createLineOffsetsTable();
         createTokenLocationTable();
      }
 
@@ -357,6 +356,7 @@ abstract public class TokenSource implements CharSequence
      * are parsed (i.e. not ignored)
      */
     private void setParsedLines(BitSet parsedLines, boolean reversed) {
+        int[] lineOffsets = lineOffsets();
         for (int i = 0; i < lineOffsets.length; i++) {
             boolean turnOffLine = !parsedLines.get(i + 1);
             if (reversed) turnOffLine = !turnOffLine;
@@ -393,6 +393,7 @@ abstract public class TokenSource implements CharSequence
      * The offset of the start of the given line. This is in code units
      */
     public int getLineStartOffset(int lineNumber) {
+        int[] lineOffsets = lineOffsets();
         int realLineNumber = lineNumber - startingLine;
         if (realLineNumber <= 0) {
             return 0;
@@ -407,6 +408,7 @@ abstract public class TokenSource implements CharSequence
      * The offset of the end of the given line. This is in code units.
      */
     public int getLineEndOffset(int lineNumber) {
+        int[] lineOffsets = lineOffsets();
         int realLineNumber = lineNumber - startingLine;
         if (realLineNumber < 0) {
             return 0;
@@ -421,6 +423,7 @@ abstract public class TokenSource implements CharSequence
     }
 
     public int getLineFromOffset(int pos) {
+        int[] lineOffsets = lineOffsets();
         if (pos >= content.length()) {
             if (content.charAt(content.length() - 1) == '\n') {
                 return startingLine + lineOffsets.length;
@@ -434,6 +437,13 @@ abstract public class TokenSource implements CharSequence
         }
         #-- REVISIT
         return Math.max(startingLine, startingLine -(bsearchResult + 2));
+    }
+
+    // The line table is built when a line or column is first asked for, which
+    // a parse without errors often never does.
+    private int[] lineOffsets() {
+        if (lineOffsets == null) createLineOffsetsTable();
+        return lineOffsets;
     }
 
     private void createLineOffsetsTable() {
@@ -478,7 +488,7 @@ abstract public class TokenSource implements CharSequence
         if (pos >= content.length()) return 1;
         if (pos == 0) return startingColumn;
         final int line = getLineFromOffset(pos)-startingLine;
-        final int lineStart = lineOffsets[line];
+        final int lineStart = lineOffsets()[line];
         int startColumnAdjustment = line > 0 ? 1 : startingColumn;
         int unadjustedColumn = pos - lineStart + startColumnAdjustment;
         if (!needToCalculateColumns.get(line)) {
