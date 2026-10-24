@@ -148,6 +148,7 @@ public class ${settings::baseTokenClassName} ${implements} {
      * be public because it is part of the ${settings::parserPackage}.Node interface.
      */
     public void setBeginOffset(int beginOffset) {
+        if (beginOffset == this.beginOffset) return;
         this.beginOffset = beginOffset;
         tokenChanged();
     }
@@ -158,6 +159,7 @@ public class ${settings::baseTokenClassName} ${implements} {
      * be public because it is part of the ${settings::parserPackage}.Node interface.
      */
     public void setEndOffset(int endOffset) {
+        if (endOffset == this.endOffset) return;
         this.endOffset = endOffset;
         tokenChanged();
     }
@@ -188,6 +190,7 @@ public class ${settings::baseTokenClassName} ${implements} {
      * programmer needs to use this method.
      */
     public void setTokenSource(TokenSource tokenSource) {
+        if (tokenSource == this.tokenSource) return;
         tokenChanged();
         this.tokenSource = tokenSource;
         tokenChanged();
@@ -440,6 +443,7 @@ public class ${settings::baseTokenClassName} ${implements} {
     }
 
     public void setUnparsed(boolean unparsed) {
+        if (unparsed == this.unparsed) return;
         this.unparsed = unparsed;
         tokenChanged();
     }

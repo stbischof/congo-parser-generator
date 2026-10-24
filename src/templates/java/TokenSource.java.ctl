@@ -304,7 +304,9 @@ abstract public class TokenSource implements CharSequence
         int beginOffset = tok.getBeginOffset();
         // If the token is already cached, we just jump out. (I think this is okay...)
         if (tokenLocationTable[beginOffset] == tok) return;
-        cacheVersion++;
+        // A token behind all the cached ones is no other token's successor yet,
+        // so only a token cached in between changes what follows a token.
+        if (beginOffset < tokenOffsets.length()) cacheVersion++;
         int endOffset = tok.getEndOffset();
         tokenOffsets.set(beginOffset);
         if (endOffset > beginOffset + 1) {
