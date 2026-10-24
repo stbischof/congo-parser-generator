@@ -118,9 +118,15 @@ private boolean unparsedTokensAreNodes = ${settings::unparsedTokensAreNodes ? "t
     private boolean closeNodeScope(Node n, int num) {
         n.setBeginOffset(lastConsumedToken.getEndOffset());
         n.setEndOffset(lastConsumedToken.getEndOffset());
-        currentNodeScope.close();
+        // The children are the last num nodes of this scope and, if it holds fewer,
+        // of the scopes around it. Those of this scope are taken from it directly
+        // instead of being moved to the enclosing scope and popped from there.
+        NodeScope scope = currentNodeScope;
         Node[] nodes = new Node[num];
-        for (int i = num - 1; i >= 0; i--) {
+        int fromScope = Math.min(num, scope.size());
+        scope.takeLast(fromScope, nodes, num - fromScope);
+        scope.close();
+        for (int i = num - fromScope - 1; i >= 0; i--) {
            nodes[i] = popNode();
         }
         for (Node child : nodes) {
@@ -223,8 +229,17 @@ private boolean unparsedTokensAreNodes = ${settings::unparsedTokensAreNodes ? "t
         }
 
         void close() {
-            parentScope.addAll(this);
+            if (!isEmpty()) parentScope.addAll(this);
             ${settings::parserClassName}.this.currentNodeScope = parentScope;
+        }
+
+        // Moves the last count nodes of this scope into target, from index offset on.
+        void takeLast(int count, Node[] target, int offset) {
+            int from = size() - count;
+            for (int i = 0; i < count; i++) {
+                target[offset + i] = get(from + i);
+            }
+            removeRange(from, size());
         }
 
         int nestingLevel() {
