@@ -10,15 +10,12 @@ private final ArrayList<NonTerminalCall> lookaheadEntries = new ArrayList<>();
   private EnumSet<TokenType> currentFollowSet;
 #endif
 
+private void pushOntoCallStack(NonTerminalCall.Site site) {
+   parsingStack.add(new NonTerminalCall(site, getToken(1) ${settings::faultTolerant ? ", currentFollowSet"}));
+}
+
 private void pushOntoCallStack(String methodName, String fileName, int line, int column) {
-   parsingStack.add(new NonTerminalCall("${settings::parserClassName}",
-                                        getToken(1),
-                                        fileName,
-                                        methodName,
-                                        line,
-                                        column
-                                        ${settings::faultTolerant ? ", currentFollowSet"}
-                                        ));
+   pushOntoCallStack(new NonTerminalCall.Site("${settings::parserClassName}", fileName, methodName, line, column));
 }
 
 private void popCallStack() {
@@ -101,22 +98,14 @@ private Iterator<String> backwardStackIteratorIncludingCurrent() {
     };
 }
 
-private void pushOntoLookaheadStack(String methodName, String fileName, int line, int column) {
+private void pushOntoLookaheadStack(NonTerminalCall.Site site) {
     int depth = lookaheadStack.size();
     NonTerminalCall ntc;
     if (depth < lookaheadEntries.size()) {
         ntc = lookaheadEntries.get(depth);
-        ntc.reuse(getToken(1), fileName, methodName, line, column);
+        ntc.reuse(site, getToken(1));
     } else {
-        ntc = new NonTerminalCall(
-          "${settings::parserClassName}",
-          getToken(1),
-          fileName,
-          methodName,
-          line,
-          column
-          ${settings::faultTolerant ? ", null"}
-        );
+        ntc = new NonTerminalCall(site, getToken(1) ${settings::faultTolerant ? ", null"});
         lookaheadEntries.add(ntc);
     }
     lookaheadStack.add(ntc);
@@ -197,7 +186,7 @@ void dumpLookaheadCallStack(PrintStream ps) {
         #if settings::faultTolerant
           , boolean tolerant, EnumSet<TokenType> followSet, Runnable recoveryAction
         #else
-          , String productionName, String fileName, int line, int column
+          , NonTerminalCall.Site site
         #endif
       )
       ${settings::useCheckedException ? "throws ParseException"}
@@ -214,7 +203,7 @@ void dumpLookaheadCallStack(PrintStream ps) {
             #if settings::faultTolerant
                , tolerant, followSet
             #else
-               , productionName, fileName, line, column
+               , site
             #endif
             );
         }
@@ -256,7 +245,7 @@ void dumpLookaheadCallStack(PrintStream ps) {
       #if settings::faultTolerant
         , boolean tolerant, EnumSet<TokenType> followSet
       #else
-        , String productionName, String fileName, int line, int column
+        , NonTerminalCall.Site site
       #endif
       )
       #if settings::useCheckedException
@@ -266,7 +255,7 @@ void dumpLookaheadCallStack(PrintStream ps) {
       #if !settings::faultTolerant
        // The terminal is the innermost entry of the call stack, but it is
        // pushed only now that it failed, not for every token consumed.
-       pushOntoCallStack(productionName, fileName, line, column);
+       pushOntoCallStack(site);
        ParseException pe = new ParseException(nextToken, EnumSet.of(expectedType), parsingStack);
        popCallStack();
        throw pe;
