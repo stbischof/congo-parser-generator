@@ -68,6 +68,17 @@
   }
 
 #if lexerData::hasContextualTokens
+  // scanToken for a set that holds no contextual keyword
+  private boolean scanTokenOf(EnumSet<TokenType> types) {
+     ${settings::baseTokenClassName} peekedToken = nextToken(currentLookaheadToken);
+     if (!types.contains(peekedToken.getType())) return false;
+     --remainingLookahead;
+     currentLookaheadToken = peekedToken;
+     return true;
+  }
+#endif
+
+#if lexerData::hasContextualTokens
   private boolean typeMatches(TokenType type, ${settings::baseTokenClassName} tok) {
      if (tok.getType() == type) return true;
      if (type.isContextualKeyword()) {
@@ -548,6 +559,8 @@
           [#if name_has_next],[/#if]
         #endlist
       )) ${returnFalse(cardinalitiesVar!null)};
+    #elif lexerData::hasContextualTokens && !expansion::firstSet::hasContextualTokens
+      if (!scanTokenOf(${expansion::firstSetVarName})) ${returnFalse(cardinalitiesVar!null)};
     #else
       if (!scanToken(${expansion::firstSetVarName})) ${returnFalse(cardinalitiesVar!null)};
     #endif
@@ -712,6 +725,8 @@
           ${name} ${name_has_next ? ","}
         #endlist
       )
+     #elif lexerData::hasContextualTokens && !expansion::firstSet::hasContextualTokens
+      scanTokenOf(${expansion::firstSetVarName})
      #else
       scanToken(${expansion::firstSetVarName})
      #endif

@@ -1103,7 +1103,9 @@
           typeMatches(${name}, getToken(1))
           ${name_has_next ? "||"}
       #endlist
-   #else
+   #elif expansion::firstSet::hasContextualTokens
       hasMatch(${expansion::firstSetVarName}, getToken(1))
+   #else
+      ${expansion::firstSetVarName}.contains(getToken(1).getType())
    #endif
 #endmacro
