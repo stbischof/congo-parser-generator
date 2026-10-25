@@ -332,19 +332,18 @@ public boolean getLegacyGlitchyLookahead() {
     }
 
 #var NEXT_TOKEN_MEMO = grammar::parserTokenHooks.size() == 0
-#if NEXT_TOKEN_MEMO
-  // The last answer of nextToken: the token after memoFrom is memoTo, as long as
-  // the cached tokens are unchanged (TokenSource.cacheVersion)
-  private ${settings::baseTokenClassName} memoFrom, memoTo;
-  private int memoVersion;
-#endif
-
   // If the next token is cached, it returns that
   // Otherwise, it goes to the token_source, i.e. the Lexer.
   private ${settings::baseTokenClassName} nextToken(final ${settings::baseTokenClassName} tok) {
 #if NEXT_TOKEN_MEMO
-    if (tok == memoFrom && tok != null && memoVersion == token_source.getCacheVersion()) return memoTo;
+    // Each token keeps the last answer for it, as long as the cached tokens are
+    // unchanged (TokenSource.cacheVersion)
     int version = token_source.getCacheVersion();
+    if (tok != null && tok.nextToken != null && tok.nextTokenVersion == version
+   #if settings::faultTolerant
+        && !(tok.nextToken.isInvalid() && isParserTolerant())
+   #endif
+    ) return tok.nextToken;
 #endif
     ${settings::baseTokenClassName} result = token_source.getNextToken(tok);
      #list grammar::parserTokenHooks as methodName
@@ -366,9 +365,8 @@ public boolean getLegacyGlitchyLookahead() {
 #if NEXT_TOKEN_MEMO
     // Kept only if finding it changed nothing, so that asking again gives the same token
     if (tok != null && version == token_source.getCacheVersion() && tok.getTokenSource() == token_source) {
-      memoFrom = tok;
-      memoTo = result;
-      memoVersion = version;
+      tok.nextToken = result;
+      tok.nextTokenVersion = version;
     }
 #endif
     return result;

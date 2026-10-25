@@ -90,6 +90,13 @@ public class ${settings::baseTokenClassName} ${implements} {
 #endif
 
     private String cachedImage;
+
+#if grammar::parserTokenHooks.size() == 0
+    // The parser's answer for the token after this one, valid while the
+    // cacheVersion of the token source is nextTokenVersion
+    ${settings::baseTokenClassName} nextToken;
+    int nextTokenVersion;
+#endif
     /**
      * If cachedImage is set, then the various methods
      * that implement #java.lang.CharSequence use that string
@@ -211,7 +218,9 @@ public class ${settings::baseTokenClassName} ${implements} {
     }
 
     protected void setType(TokenType type) {
+        if (type == this.type) return;
         this.type = type;
+        tokenChanged();
     }
 
     /**
