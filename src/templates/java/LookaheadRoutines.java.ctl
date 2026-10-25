@@ -36,7 +36,7 @@
             #break
           #endif
           #var expansion = callSites[offset]
-        CALL_SITES[${offset}] = new NonTerminalCall.Site("${settings::parserClassName}", "${expansion::inputSource.JavaStringEncode}", "${expansion::containingProduction::name}", ${expansion::beginLine}, ${expansion::beginColumn});
+        CALL_SITES[${offset}] = new NonTerminalCall.Site("${settings::parserClassName}", "${expansion::inputSource.JavaStringEncode}", "${expansion::containingProduction::name}", ${expansion::beginLine}, ${expansion::beginColumn}, ${offset});
        #endlist
     }
     #endlist

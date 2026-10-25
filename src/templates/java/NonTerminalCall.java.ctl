@@ -20,13 +20,21 @@ public class NonTerminalCall {
         // public, as with ROOT_API_PACKAGE the parser is in another package
         public final String productionName;
         final int line, column;
+        // the index in the parser's table of sites, or -1; public, as with ROOT_API_PACKAGE
+        // the parser is in another package
+        public final int index;
 
         public Site(String parserClassName, String sourceFile, String productionName, int line, int column) {
+            this(parserClassName, sourceFile, productionName, line, column, -1);
+        }
+
+        public Site(String parserClassName, String sourceFile, String productionName, int line, int column, int index) {
             this.parserClassName = parserClassName;
             this.sourceFile = sourceFile;
             this.productionName = productionName;
             this.line = line;
             this.column = column;
+            this.index = index;
         }
     }
 

@@ -1,6 +1,6 @@
 #var MULTIPLE_LEXICAL_STATE_HANDLING = (lexerData::numLexicalStates > 1)
 
-private CallStack parsingStack = new CallStack(32);
+private CallStack parsingStack = new CallStack(64);
 private final ArrayList<NonTerminalCall> lookaheadStack = new ArrayList<>();
 // The entries the lookahead stack has had, one per depth, for reuse. Only their
 // production name is read, and neither a ParseException nor a ParseState copies them.
@@ -31,23 +31,26 @@ private void popCallStack() {
 /**
  * The parse call stack. An entry is kept as its place in the grammar and its location,
  * and its NonTerminalCall is only made when the stack is read; it is then kept until
- * the entry is popped.
+ * the entry is popped. An entry from a site of CALL_SITES on the usual token source is
+ * one long (index of the site, position); any other one has its site and token source
+ * in two side arrays.
  */
 private static final class CallStack extends java.util.AbstractList<NonTerminalCall> implements java.util.RandomAccess {
+    // the index of the site (or -1: see sites and tokenSources) and the position
+    private long[] frames;
     private NonTerminalCall.Site[] sites;
     private TokenSource[] tokenSources;
-    private int[] positions;
    #if settings::faultTolerant
     private EnumSet<TokenType>[] followSets;
    #endif
+    // the entries made so far; null at and above size
     private NonTerminalCall[] entries;
+    private TokenSource usualTokenSource;
     private int size;
 
     @SuppressWarnings("unchecked")
     CallStack(int capacity) {
-        sites = new NonTerminalCall.Site[capacity];
-        tokenSources = new TokenSource[capacity];
-        positions = new int[capacity];
+        frames = new long[capacity];
    #if settings::faultTolerant
         followSets = (EnumSet<TokenType>[]) new EnumSet<?>[capacity];
    #endif
@@ -55,11 +58,13 @@ private static final class CallStack extends java.util.AbstractList<NonTerminalC
     }
 
     private void ensureCapacity(int capacity) {
-        if (capacity > sites.length) {
-            int length = Math.max(capacity, sites.length * 2);
-            sites = Arrays.copyOf(sites, length);
-            tokenSources = Arrays.copyOf(tokenSources, length);
-            positions = Arrays.copyOf(positions, length);
+        if (capacity > frames.length) {
+            int length = Math.max(capacity, frames.length * 2);
+            frames = Arrays.copyOf(frames, length);
+            if (sites != null) {
+                sites = Arrays.copyOf(sites, length);
+                tokenSources = Arrays.copyOf(tokenSources, length);
+            }
    #if settings::faultTolerant
             followSets = Arrays.copyOf(followSets, length);
    #endif
@@ -69,25 +74,49 @@ private static final class CallStack extends java.util.AbstractList<NonTerminalC
 
     void push(NonTerminalCall.Site site, TokenSource tokenSource, int position ${settings::faultTolerant ? ", EnumSet<TokenType> followSet"}) {
         ensureCapacity(size + 1);
-        sites[size] = site;
-        tokenSources[size] = tokenSource;
-        positions[size] = position;
+        if (usualTokenSource == null) {
+            usualTokenSource = tokenSource;
+        }
+        int index = site.index;
+        if (index >= 0 && index < CALL_SITES.length && CALL_SITES[index] == site && tokenSource == usualTokenSource) {
+            frames[size] = ((long) index << 32) | (position & 0xFFFFFFFFL);
+        } else {
+            setAside(size, site, tokenSource, position);
+        }
    #if settings::faultTolerant
         followSets[size] = followSet;
    #endif
-        entries[size++] = null;
+        size++;
         modCount++;
+    }
+
+    private void setAside(int index, NonTerminalCall.Site site, TokenSource tokenSource, int position) {
+        if (sites == null) {
+            sites = new NonTerminalCall.Site[frames.length];
+            tokenSources = new TokenSource[frames.length];
+        }
+        frames[index] = (-1L << 32) | (position & 0xFFFFFFFFL);
+        sites[index] = site;
+        tokenSources[index] = tokenSource;
     }
 
     void pop() {
         checkIndex(size - 1, size);
-        entries[--size] = null;
+        --size;
+        if (entries[size] != null) {
+            entries[size] = null;
+        }
         modCount++;
+    }
+
+    private NonTerminalCall.Site site(int index) {
+        int site = (int) (frames[index] >> 32);
+        return site >= 0 ? CALL_SITES[site] : sites[index];
     }
 
     String productionName(int index) {
         NonTerminalCall entry = entries[index];
-        return entry != null ? entry.productionName : sites[index].productionName;
+        return entry != null ? entry.productionName : site(index).productionName;
     }
 
    #if settings::faultTolerant
@@ -100,13 +129,16 @@ private static final class CallStack extends java.util.AbstractList<NonTerminalC
 
     CallStack copy() {
         CallStack copy = new CallStack(0);
-        copy.sites = sites.clone();
-        copy.tokenSources = tokenSources.clone();
-        copy.positions = positions.clone();
+        copy.frames = frames.clone();
+        if (sites != null) {
+            copy.sites = sites.clone();
+            copy.tokenSources = tokenSources.clone();
+        }
    #if settings::faultTolerant
         copy.followSets = followSets.clone();
    #endif
         copy.entries = entries.clone();
+        copy.usualTokenSource = usualTokenSource;
         copy.size = size;
         return copy;
     }
@@ -129,7 +161,11 @@ private static final class CallStack extends java.util.AbstractList<NonTerminalC
         checkIndex(index, size);
         NonTerminalCall entry = entries[index];
         if (entry == null) {
-            entry = entries[index] = new NonTerminalCall(sites[index], tokenSources[index], positions[index] ${settings::faultTolerant ? ", followSets[index]"});
+            long frame = frames[index];
+            int site = (int) (frame >> 32);
+            entry = entries[index] = site >= 0
+                ? new NonTerminalCall(CALL_SITES[site], usualTokenSource, (int) frame ${settings::faultTolerant ? ", followSets[index]"})
+                : new NonTerminalCall(sites[index], tokenSources[index], (int) frame ${settings::faultTolerant ? ", followSets[index]"});
         }
         return entry;
     }
@@ -141,11 +177,13 @@ private static final class CallStack extends java.util.AbstractList<NonTerminalC
         return previous;
     }
 
+    // An entry added as a NonTerminalCall is only read as that.
     @Override
     public void add(int index, NonTerminalCall entry) {
         checkIndex(index, size + 1);
         ensureCapacity(size + 1);
         shift(index, index + 1);
+        frames[index] = -1L << 32;
         entries[index] = entry;
         size++;
         modCount++;
@@ -171,9 +209,11 @@ private static final class CallStack extends java.util.AbstractList<NonTerminalC
     // Moves the entries from index from on to index to.
     private void shift(int from, int to) {
         int count = size - from;
-        System.arraycopy(sites, from, sites, to, count);
-        System.arraycopy(tokenSources, from, tokenSources, to, count);
-        System.arraycopy(positions, from, positions, to, count);
+        System.arraycopy(frames, from, frames, to, count);
+        if (sites != null) {
+            System.arraycopy(sites, from, sites, to, count);
+            System.arraycopy(tokenSources, from, tokenSources, to, count);
+        }
    #if settings::faultTolerant
         System.arraycopy(followSets, from, followSets, to, count);
    #endif
