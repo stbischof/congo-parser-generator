@@ -1,6 +1,6 @@
 #var MULTIPLE_LEXICAL_STATE_HANDLING = (lexerData::numLexicalStates > 1)
 
-private ArrayList<NonTerminalCall> parsingStack = new ArrayList<>();
+private CallStack parsingStack = new CallStack(32);
 private final ArrayList<NonTerminalCall> lookaheadStack = new ArrayList<>();
 // The entries the lookahead stack has had, one per depth, for reuse. Only their
 // production name is read, and neither a ParseException nor a ParseState copies them.
@@ -11,7 +11,8 @@ private final ArrayList<NonTerminalCall> lookaheadEntries = new ArrayList<>();
 #endif
 
 private void pushOntoCallStack(NonTerminalCall.Site site) {
-   parsingStack.add(new NonTerminalCall(site, getToken(1) ${settings::faultTolerant ? ", currentFollowSet"}));
+   ${settings::baseTokenClassName} location = getToken(1);
+   parsingStack.push(site, location.getTokenSource(), location.getBeginOffset() ${settings::faultTolerant ? ", currentFollowSet"});
 }
 
 private void pushOntoCallStack(String methodName, String fileName, int line, int column) {
@@ -19,11 +20,165 @@ private void pushOntoCallStack(String methodName, String fileName, int line, int
 }
 
 private void popCallStack() {
-    NonTerminalCall ntc = parsingStack.remove(parsingStack.size() - 1);
-    this.currentlyParsedProduction = ntc.productionName;
+    int top = parsingStack.size() - 1;
+    this.currentlyParsedProduction = parsingStack.productionName(top);
    #if settings::faultTolerant
-    this.outerFollowSet = (EnumSet<TokenType>) ntc.followSet;
+    this.outerFollowSet = parsingStack.followSet(top);
    #endif
+    parsingStack.pop();
+}
+
+/**
+ * The parse call stack. An entry is kept as its place in the grammar and its location,
+ * and its NonTerminalCall is only made when the stack is read; it is then kept until
+ * the entry is popped.
+ */
+private static final class CallStack extends java.util.AbstractList<NonTerminalCall> implements java.util.RandomAccess {
+    private NonTerminalCall.Site[] sites;
+    private TokenSource[] tokenSources;
+    private int[] positions;
+   #if settings::faultTolerant
+    private EnumSet<TokenType>[] followSets;
+   #endif
+    private NonTerminalCall[] entries;
+    private int size;
+
+    @SuppressWarnings("unchecked")
+    CallStack(int capacity) {
+        sites = new NonTerminalCall.Site[capacity];
+        tokenSources = new TokenSource[capacity];
+        positions = new int[capacity];
+   #if settings::faultTolerant
+        followSets = (EnumSet<TokenType>[]) new EnumSet<?>[capacity];
+   #endif
+        entries = new NonTerminalCall[capacity];
+    }
+
+    private void ensureCapacity(int capacity) {
+        if (capacity > sites.length) {
+            int length = Math.max(capacity, sites.length * 2);
+            sites = Arrays.copyOf(sites, length);
+            tokenSources = Arrays.copyOf(tokenSources, length);
+            positions = Arrays.copyOf(positions, length);
+   #if settings::faultTolerant
+            followSets = Arrays.copyOf(followSets, length);
+   #endif
+            entries = Arrays.copyOf(entries, length);
+        }
+    }
+
+    void push(NonTerminalCall.Site site, TokenSource tokenSource, int position ${settings::faultTolerant ? ", EnumSet<TokenType> followSet"}) {
+        ensureCapacity(size + 1);
+        sites[size] = site;
+        tokenSources[size] = tokenSource;
+        positions[size] = position;
+   #if settings::faultTolerant
+        followSets[size] = followSet;
+   #endif
+        entries[size++] = null;
+        modCount++;
+    }
+
+    void pop() {
+        checkIndex(size - 1, size);
+        entries[--size] = null;
+        modCount++;
+    }
+
+    String productionName(int index) {
+        NonTerminalCall entry = entries[index];
+        return entry != null ? entry.productionName : sites[index].productionName;
+    }
+
+   #if settings::faultTolerant
+    @SuppressWarnings("unchecked")
+    EnumSet<TokenType> followSet(int index) {
+        NonTerminalCall entry = entries[index];
+        return entry != null ? (EnumSet<TokenType>) entry.followSet : followSets[index];
+    }
+   #endif
+
+    CallStack copy() {
+        CallStack copy = new CallStack(0);
+        copy.sites = sites.clone();
+        copy.tokenSources = tokenSources.clone();
+        copy.positions = positions.clone();
+   #if settings::faultTolerant
+        copy.followSets = followSets.clone();
+   #endif
+        copy.entries = entries.clone();
+        copy.size = size;
+        return copy;
+    }
+
+    // REVISIT(JDK>8): Objects.checkIndex (Java 9) instead, once the generated code may require
+    // more than Java 8 (CongoCC's examples compile it for Java 8). Same exception and message.
+    private static void checkIndex(int index, int length) {
+        if (index < 0 || index >= length) {
+            throw new IndexOutOfBoundsException("Index " + index + " out of bounds for length " + length);
+        }
+    }
+
+    @Override
+    public int size() {
+        return size;
+    }
+
+    @Override
+    public NonTerminalCall get(int index) {
+        checkIndex(index, size);
+        NonTerminalCall entry = entries[index];
+        if (entry == null) {
+            entry = entries[index] = new NonTerminalCall(sites[index], tokenSources[index], positions[index] ${settings::faultTolerant ? ", followSets[index]"});
+        }
+        return entry;
+    }
+
+    @Override
+    public NonTerminalCall set(int index, NonTerminalCall entry) {
+        NonTerminalCall previous = get(index);
+        entries[index] = entry;
+        return previous;
+    }
+
+    @Override
+    public void add(int index, NonTerminalCall entry) {
+        checkIndex(index, size + 1);
+        ensureCapacity(size + 1);
+        shift(index, index + 1);
+        entries[index] = entry;
+        size++;
+        modCount++;
+    }
+
+    @Override
+    public NonTerminalCall remove(int index) {
+        NonTerminalCall previous = get(index);
+        shift(index + 1, index);
+        entries[--size] = null;
+        modCount++;
+        return previous;
+    }
+
+    @Override
+    protected void removeRange(int from, int to) {
+        shift(to, from);
+        Arrays.fill(entries, size - (to - from), size, null);
+        size -= to - from;
+        modCount++;
+    }
+
+    // Moves the entries from index from on to index to.
+    private void shift(int from, int to) {
+        int count = size - from;
+        System.arraycopy(sites, from, sites, to, count);
+        System.arraycopy(tokenSources, from, tokenSources, to, count);
+        System.arraycopy(positions, from, positions, to, count);
+   #if settings::faultTolerant
+        System.arraycopy(followSets, from, followSets, to, count);
+   #endif
+        System.arraycopy(entries, from, entries, to, count);
+    }
 }
 
 private void restoreCallStack(int prevSize) {
@@ -291,7 +446,7 @@ void dumpLookaheadCallStack(PrintStream ps) {
 
   private class ParseState {
        ${settings::baseTokenClassName} lastConsumed;
-       ArrayList<NonTerminalCall> parsingStack;
+       CallStack parsingStack;
    #if MULTIPLE_LEXICAL_STATE_HANDLING
        LexicalState lexicalState;
    #endif
@@ -301,9 +456,7 @@ void dumpLookaheadCallStack(PrintStream ps) {
    #endif
        ParseState() {
            this.lastConsumed = ${settings::parserClassName}.this.lastConsumedToken;
-          @SuppressWarnings("unchecked")
-           ArrayList<NonTerminalCall> parsingStack = (ArrayList<NonTerminalCall>) ${settings::parserClassName}.this.parsingStack.clone();
-           this.parsingStack = parsingStack;
+           this.parsingStack = ${settings::parserClassName}.this.parsingStack.copy();
 #if MULTIPLE_LEXICAL_STATE_HANDLING
            this.lexicalState = token_source.lexicalState;
 #endif

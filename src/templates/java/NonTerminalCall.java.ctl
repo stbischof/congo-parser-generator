@@ -16,7 +16,9 @@ public class NonTerminalCall {
      * place in the grammar: the generated parser holds one constant per place.
      */
     public static final class Site {
-        final String parserClassName, sourceFile, productionName;
+        final String parserClassName, sourceFile;
+        // public, as with ROOT_API_PACKAGE the parser is in another package
+        public final String productionName;
         final int line, column;
 
         public Site(String parserClassName, String sourceFile, String productionName, int line, int column) {
@@ -47,6 +49,23 @@ public class NonTerminalCall {
         this.productionName = site.productionName;
         this.tokenSource = location.getTokenSource();
         this.position = location.getBeginOffset();
+#if settings::faultTolerant
+        this.followSet = followSet;
+#endif
+    }
+
+    // An entry of the parse call stack, made when the stack is read.
+    // Public, as with ROOT_API_PACKAGE the parser is in another package.
+    public NonTerminalCall(Site site, TokenSource tokenSource, int position
+                          #if settings::faultTolerant
+                             , Set<${BaseTokenType}> followSet
+                          #endif
+    )
+    {
+        this.site = site;
+        this.productionName = site.productionName;
+        this.tokenSource = tokenSource;
+        this.position = position;
 #if settings::faultTolerant
         this.followSet = followSet;
 #endif

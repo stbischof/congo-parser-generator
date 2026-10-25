@@ -523,16 +523,24 @@ public boolean getLegacyGlitchyLookahead() {
         if (currentLookaheadProduction.equals(name)) return true;
       }
     }
-    Iterator<NonTerminalCall> it = stackIteratorBackward();
-    while (it.hasNext()) {
-      NonTerminalCall ntc = it.next();
-      if (ntc.productionName.equals(productionName)) {
+    // The stacks from the top down, the lookahead stack first (as stackIteratorBackward),
+    // without making the entries of the call stack
+    for (int i = lookaheadStack.size() - 1; i >= 0; i--) {
+      if (isProduction(lookaheadStack.get(i).productionName, productionName, prods)) return true;
+    }
+    for (int i = parsingStack.size() - 1; i >= 0; i--) {
+      if (isProduction(parsingStack.productionName(i), productionName, prods)) return true;
+    }
+    return false;
+  }
+
+  private static boolean isProduction(String name, String productionName, String... prods) {
+    if (name.equals(productionName)) {
+      return true;
+    }
+    for (String other : prods) {
+      if (name.equals(other)) {
         return true;
-      }
-      for (String name : prods) {
-        if (ntc.productionName.equals(name)) {
-          return true;
-        }
       }
     }
     return false;
