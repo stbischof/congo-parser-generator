@@ -119,15 +119,16 @@ abstract public class TokenSource implements CharSequence
         }
         return content.toString();
     }
-    StringBuilder buf = new StringBuilder();
+    // The text between the characters that change is copied in one piece, and
+    // not at all if nothing changes.
+    StringBuilder buf = null;
     // This is just to handle tabs to spaces. If you're preserving tabs, then it
     // is really unused.
     int col = 0;
-    int index = 0, contentLength = content.length();
+    int index = 0, contentLength = content.length(), copied = 0;
     while (index < contentLength) {
         char ch = content.charAt(index++);
         if (ch == '\n') {
-            buf.append(ch);
             col = 0;
         }
         else if (javaUnicodeEscape && ch == '\\' && index < contentLength && content.charAt(index)=='u') {
@@ -138,7 +139,6 @@ abstract public class TokenSource implements CharSequence
                 else break;
             }
             if (numPrecedingSlashes % 2 == 0) {
-                buf.append('\\');
                 ++col;
                 continue;
             }
@@ -149,30 +149,43 @@ abstract public class TokenSource implements CharSequence
             }
             String fourHexDigits = content.subSequence(index + numConsecutiveUs,
                                           index + numConsecutiveUs + 4).toString();
+            if (buf == null) buf = new StringBuilder(contentLength);
+            buf.append(content, copied, index - 1);
             // The parseInt can throw an exception, of course, but we just
             // let it throw and have the exception bubble up.
             buf.append((char) Integer.parseInt(fourHexDigits, 16));
             index += (numConsecutiveUs + 4);
+            copied = index;
             ++col;
         }
         else if (!preserveLines && ch == '\r') {
+            if (buf == null) buf = new StringBuilder(contentLength);
+            buf.append(content, copied, index - 1);
             buf.append('\n');
             col = 0;
             if (index < contentLength && content.charAt(index) == '\n') {
                 ++index;
             }
+            copied = index;
         } else if (ch == '\t' && !preserveTabs) {
+            if (buf == null) buf = new StringBuilder(contentLength);
+            buf.append(content, copied, index - 1);
             int spacesToAdd = tabSize - col % tabSize;
             for (int i = 0; i < spacesToAdd; i++) {
                 buf.append(' ');
                 col++;
             }
+            copied = index;
         } else {
-            buf.append(ch);
             if (!Character.isLowSurrogate(ch)) col++;
         }
     }
-    if (!terminatingString.isEmpty() && !endsWith(content,terminatingString)) {
+    boolean terminate = !terminatingString.isEmpty() && !endsWith(content,terminatingString);
+    if (buf == null) {
+        return terminate ? content.toString() + terminatingString : content.toString();
+    }
+    buf.append(content, copied, contentLength);
+    if (terminate) {
         buf.append(terminatingString);
     }
     return buf.toString();
